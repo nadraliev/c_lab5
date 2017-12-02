@@ -42,10 +42,8 @@ typedef struct fs_node_s {
 
 } fs_node_t;
 
-//static fs_node_t *create_file(char*);
 static fs_node_t *create_file_with_perm(char *, mode_t);
 
-//static fs_node_t *create_directory(char*);
 static fs_node_t *create_directory_with_perm(char *, mode_t);
 
 static fs_node_t *add_file_with_perm(fs_node_t *, char *, mode_t mode);
@@ -186,10 +184,6 @@ static struct fuse_operations operations = {
         .chmod = do_chmod
 };
 
-//static fs_node_t *create_directory(char *name) {
-//    create_file_with_perm(name, 0666);
-//}
-
 static fs_node_t *create_directory_with_perm(char *name, mode_t mode) {
     fs_node_t *node;
 
@@ -212,10 +206,6 @@ static fs_node_t *add_directory_with_perm(fs_node_t *root, char *name, mode_t mo
     add_child_node(root, dir);
     return dir;
 }
-
-//static fs_node_t *create_file(char* name) {
-//    create_file_with_perm(name, 0666);
-//}
 
 static fs_node_t *create_file_with_perm(char *name, mode_t mode) {
     fs_node_t *node;
@@ -246,31 +236,6 @@ static void add_child_node(fs_node_t *parent, fs_node_t *child) {
 
     child->next_sibling = parent->info.dir.child;
     parent->info.dir.child = child;
-}
-
-static void make_sample_hierarchy() {
-    fs_node_t *first, *second;
-    fs_node_t *file;
-    fs_node_t *first_inner;
-
-    first = create_directory_with_perm("first", 0666);
-    root->n_links++; /* a new subfolder */
-    add_child_node(root, first);
-
-    second = create_directory_with_perm("second", 0666);
-    root->n_links++; /* a new subfolder */
-    add_child_node(root, second);
-
-    first_inner = create_directory_with_perm("first_inner", 0666);
-    first->n_links++; /* a new subfolder */
-    add_child_node(first, first_inner);
-
-    file = create_file_with_perm("sample.txt", 0666);
-    file->n_links++; /* a new hard link */
-    add_child_node(root, file);
-
-    file->info.file.data_ptr = "Hello";
-    file->info.file.size = strlen(file->info.file.data_ptr);
 }
 
 static void generate_tree() {
