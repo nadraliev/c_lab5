@@ -174,7 +174,9 @@ static int do_chmod(const char *path, mode_t mode) {
     fs_node_t *node = find_node(path, root);
     if (node != NULL) {
         node->mode = mode;
+        return 0;
     }
+    return -1;
 }
 
 static struct fuse_operations operations = {
