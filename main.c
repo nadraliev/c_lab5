@@ -16,13 +16,11 @@ typedef enum fuse_node_type_e {
     FUSE_NODE_LINK
 } fuse_node_type_t;
 
-/* file-related information */
 typedef struct fuse_file_node_s {
     int size;
-    char *data_ptr;
+    char *data;
 } fuse_file_node_t;
 
-/* directory-related information */
 typedef struct fuse_dir_node_s {
     struct fuse_node_s *child;
 } fuse_dir_node_t;
@@ -31,7 +29,6 @@ typedef struct fuse_link_node_s {
     struct fuse_node_s *target;
 } fuse_link_node_t;
 
-/* structure representing a node in our FS tree */
 typedef struct fuse_node_s {
     char *name;
     struct fuse_node_s *next_sibling;
@@ -166,7 +163,7 @@ static int fuse_read(const char *path, char *buffer, size_t size, off_t offset, 
         }
 
         if (bytes_read > 0) {
-            memcpy(buffer, node->info.file.data_ptr, bytes_read);
+            memcpy(buffer, node->info.file.data, bytes_read);
         }
     }
 
@@ -247,7 +244,7 @@ static fuse_node_t *create_file_with_perm(char *name, mode_t mode) {
     node->type = FUSE_NODE_FILE;
     node->next_sibling = NULL;
     node->info.file.size = 0;
-    node->info.file.data_ptr = NULL;
+    node->info.file.data = NULL;
     node->n_links = 0;
 
     return node;
@@ -270,7 +267,7 @@ static fuse_node_t *create_link_with_perm(char *name, fuse_node_t *target, mode_
     node->type = FUSE_NODE_LINK;
     node->next_sibling = NULL;
     node->info.file.size = 1;
-    node->info.file.data_ptr = NULL;
+    node->info.file.data = NULL;
     node->n_links = 1;
     node->info.link.target = target;
 
@@ -305,8 +302,8 @@ static void generate_tree() {
 
     //-------------------files
     //-----------------------------------
-    readme->info.file.data_ptr = "Student Надралиев Андрей, 16150007\n\0";
-    readme->info.file.size = strlen(readme->info.file.data_ptr);
+    readme->info.file.data = "Student Надралиев Андрей, 16150007\n\0";
+    readme->info.file.size = strlen(readme->info.file.data);
 
     //------------------------------
     for (int i = 0; i < 7; i++) {
@@ -314,12 +311,12 @@ static void generate_tree() {
         testText[i * 2 + 1] = '\n';
     }
     testText[14] = '\0';
-    test->info.file.data_ptr = testText;
+    test->info.file.data = testText;
     test->info.file.size = strlen(testText);
 
     //--------------------------
-    example->info.file.data_ptr = "Hello world\n\0";
-    example->info.file.size = strlen(example->info.file.data_ptr);
+    example->info.file.data = "Hello world\n\0";
+    example->info.file.size = strlen(example->info.file.data);
 
     //-------------------
     FILE *fileptr;
@@ -334,7 +331,7 @@ static void generate_tree() {
     fread(lessBinary, fsize, 1, fileptr);
     fclose(fileptr);
 
-    less->info.file.data_ptr = lessBinary;
+    less->info.file.data = lessBinary;
     less->info.file.size = fsize;
 }
 
