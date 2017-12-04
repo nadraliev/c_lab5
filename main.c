@@ -8,92 +8,86 @@
 #include <stdlib.h>
 #include <errno.h>
 
-/* foward structure declaration (fs_node_t and fs_dir_node_t cross-reference each other) */
-struct fs_node_s;
+struct fuse_node_s;
 
-typedef enum fs_node_type_e {
-    FS_NODE_FILE,
-    FS_NODE_DIRECTORY,
-    FS_NODE_LINK
-} fs_node_type_t;
+typedef enum fuse_node_type_e {
+    FUSE_NODE_FILE,
+    FUSE_NODE_DIRECTORY,
+    FUSE_NODE_LINK
+} fuse_node_type_t;
 
 /* file-related information */
-typedef struct fs_file_node_s {
+typedef struct fuse_file_node_s {
     int size;
     char *data_ptr;
-} fs_file_node_t;
+} fuse_file_node_t;
 
 /* directory-related information */
-typedef struct fs_dir_node_s {
-    struct fs_node_s *child;
-} fs_dir_node_t;
+typedef struct fuse_dir_node_s {
+    struct fuse_node_s *child;
+} fuse_dir_node_t;
 
-typedef struct fs_link_node_s {
-    struct fs_node_s *target;
-} fs_link_node_t;
+typedef struct fuse_link_node_s {
+    struct fuse_node_s *target;
+} fuse_link_node_t;
 
 /* structure representing a node in our FS tree */
-typedef struct fs_node_s {
+typedef struct fuse_node_s {
     char *name;
-    struct fs_node_s *next_sibling;
-    fs_node_type_t type;
+    struct fuse_node_s *next_sibling;
+    fuse_node_type_t type;
     mode_t mode;
     int n_links;
 
     union {
-        fs_file_node_t file;
-        fs_dir_node_t dir;
-        fs_link_node_t link;
+        fuse_file_node_t file;
+        fuse_dir_node_t dir;
+        fuse_link_node_t link;
     } info;
 
-} fs_node_t;
+} fuse_node_t;
 
-static fs_node_t *create_file_with_perm(char *, mode_t);
+static fuse_node_t *create_file_with_perm(char *, mode_t);
 
-static fs_node_t *create_directory_with_perm(char *, mode_t);
+static fuse_node_t *create_directory_with_perm(char *, mode_t);
 
-static fs_node_t *add_file_with_perm(fs_node_t *, char *, mode_t mode);
+static fuse_node_t *add_file_with_perm(fuse_node_t *, char *, mode_t mode);
 
-static fs_node_t *add_directory_with_perm(fs_node_t *, char *, mode_t);
+static fuse_node_t *add_directory_with_perm(fuse_node_t *, char *, mode_t);
 
-static void add_child_node(fs_node_t *, fs_node_t *);
+static void add_child_node(fuse_node_t *, fuse_node_t *);
 
-static fs_node_t *find_node(const char *, fs_node_t *);
+static fuse_node_t *find_node(const char *, fuse_node_t *);
 
-static fs_node_t *create_link_with_perm(char *, fs_node_t *, mode_t);
+static fuse_node_t *create_link_with_perm(char *, fuse_node_t *, mode_t);
 
-static fs_node_t *add_link_with_perm(fs_node_t *, char *, fs_node_t *, mode_t);
+static fuse_node_t *add_link_with_perm(fuse_node_t *, char *, fuse_node_t *, mode_t);
 
-fs_node_t *root;
+fuse_node_t *root;
 char testText[15];
-char *headBinary;
+char *lessBinary;
 
-/* Find a node in our virtual FS tree corresponding to the specified path. */
-static fs_node_t *find_node(const char *path, fs_node_t *parent) {
+static fuse_node_t *find_node(const char *path, fuse_node_t *parent) {
     int entry_len = 0;
-    fs_node_t *current, *result = NULL;
+    fuse_node_t *current, *result = NULL;
 
     printf("find %s %p\n", path, parent);
 
-    /* skip leading '/' symbols */
     while (*path != '\0' && *path == '/') {
         path++;
     }
 
-    /* calculate the length of the current path entry */
     while (path[entry_len] != '\0' &&
            path[entry_len] != '/') {
         entry_len++;
     }
 
-    if (parent == NULL || parent->type != FS_NODE_DIRECTORY) {
-        /* 'parent' must represent a directory */
+    //search for node using recurse
+    if (parent == NULL || parent->type != FUSE_NODE_DIRECTORY) {
         result = parent;
     } else if (entry_len == 0) {
-        /* if the path is empty (e.g. "/" or ""), return parent */
         result = parent;
     } else {
-        /* traverse children in search for the next entry */
         current = parent->info.dir.child;
         while (current != NULL && strncmp(current->name, path, entry_len)) {
             current = current->next_sibling;
@@ -107,10 +101,8 @@ static fs_node_t *find_node(const char *path, fs_node_t *parent) {
     return result;
 }
 
-static int do_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
-    fs_node_t *parent_node, *current_node;
-
-    printf("do_readdir: %s\n", path);
+static int fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+    fuse_node_t *parent_node, *current_node;
 
     filler(buffer, ".", NULL, 0);
     filler(buffer, "..", NULL, 0);
@@ -118,7 +110,7 @@ static int do_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, of
     parent_node = find_node(path, root);
 
     if (parent_node != NULL) {
-        printf("dir found, n_links %d\n", parent_node->n_links);
+        printf("directory found, links %d\n", parent_node->n_links);
 
         current_node = parent_node->info.dir.child;
         while (current_node != NULL) {
@@ -126,27 +118,25 @@ static int do_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, of
             current_node = current_node->next_sibling;
         }
     } else {
-        printf("node not found!\n");
+        printf("directory not found!\n");
     }
 
     return 0;
 }
 
-static int do_getattr(const char *path, struct stat *st) {
-    fs_node_t *node;
+static int fuse_getattr(const char *path, struct stat *st) {
+    fuse_node_t *node;
     int ret = 0;
-
-    printf("do_getattr: %s\n", path);
 
     node = find_node(path, root);
     if (node != NULL) {
         st->st_mode = node->mode;
-        if (node->type == FS_NODE_DIRECTORY) {
+        if (node->type == FUSE_NODE_DIRECTORY) {
             st->st_mode |= S_IFDIR;
-        } else if (node->type == FS_NODE_FILE) {
+        } else if (node->type == FUSE_NODE_FILE) {
             st->st_mode |= S_IFREG;
             st->st_size = node->info.file.size;
-        } else if (node->type == FS_NODE_LINK) {
+        } else if (node->type == FUSE_NODE_LINK) {
             st->st_mode |= S_IFLNK;
             st->st_size = 1;
         }
@@ -162,8 +152,8 @@ static int do_getattr(const char *path, struct stat *st) {
     return ret;
 }
 
-static int do_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
-    fs_node_t *node;
+static int fuse_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+    fuse_node_t *node;
     int bytes_read = 0;
 
     node = find_node(path, root);
@@ -183,9 +173,9 @@ static int do_read(const char *path, char *buffer, size_t size, off_t offset, st
     return bytes_read;
 }
 
-static int do_symlink(const char *from, const char *to) {
+static int fuse_symlink(const char *from, const char *to) {
     printf("link from %s to %s \n", from, to);
-    fs_node_t *fromNode = find_node(from, root);
+    fuse_node_t *fromNode = find_node(from, root);
 
     if (fromNode == NULL) {
         return -1;
@@ -197,7 +187,7 @@ static int do_symlink(const char *from, const char *to) {
         nameLen++;
     }
 
-    fs_node_t *dirTo;
+    fuse_node_t *dirTo;
 
     if (nameLen != strlen(to)) {
         char dir[strlen(to) - nameLen];
@@ -219,44 +209,42 @@ static int do_symlink(const char *from, const char *to) {
 }
 
 static struct fuse_operations operations = {
-        .getattr    = do_getattr,
-        .readdir    = do_readdir,
-        .read         = do_read,
-        .symlink = do_symlink
+        .getattr    = fuse_getattr,
+        .readdir    = fuse_readdir,
+        .read         = fuse_read,
+        .symlink = fuse_symlink
 };
 
-static fs_node_t *create_directory_with_perm(char *name, mode_t mode) {
-    fs_node_t *node;
+static fuse_node_t *create_directory_with_perm(char *name, mode_t mode) {
+    fuse_node_t *node;
 
-    node = (fs_node_t *) malloc(sizeof(fs_node_t));
+    node = (fuse_node_t *) malloc(sizeof(fuse_node_t));
 
-    /* set default values */
     node->name = name;
     node->mode = mode;
-    node->type = FS_NODE_DIRECTORY;
+    node->type = FUSE_NODE_DIRECTORY;
     node->next_sibling = NULL;
     node->info.dir.child = NULL;
-    node->n_links = 2; /* . and .. */
+    node->n_links = 2;
 
     return node;
 }
 
-static fs_node_t *add_directory_with_perm(fs_node_t *root, char *name, mode_t mode) {
-    fs_node_t *dir = create_directory_with_perm(name, mode);
+static fuse_node_t *add_directory_with_perm(fuse_node_t *root, char *name, mode_t mode) {
+    fuse_node_t *dir = create_directory_with_perm(name, mode);
     root->n_links++;
     add_child_node(root, dir);
     return dir;
 }
 
-static fs_node_t *create_file_with_perm(char *name, mode_t mode) {
-    fs_node_t *node;
+static fuse_node_t *create_file_with_perm(char *name, mode_t mode) {
+    fuse_node_t *node;
 
-    node = (fs_node_t *) malloc(sizeof(fs_node_t));
+    node = (fuse_node_t *) malloc(sizeof(fuse_node_t));
 
-    /* set default values */
     node->name = name;
     node->mode = mode;
-    node->type = FS_NODE_FILE;
+    node->type = FUSE_NODE_FILE;
     node->next_sibling = NULL;
     node->info.file.size = 0;
     node->info.file.data_ptr = NULL;
@@ -265,22 +253,21 @@ static fs_node_t *create_file_with_perm(char *name, mode_t mode) {
     return node;
 }
 
-static fs_node_t *add_file_with_perm(fs_node_t *root, char *name, mode_t mode) {
-    fs_node_t *file = create_file_with_perm(name, mode);
+static fuse_node_t *add_file_with_perm(fuse_node_t *root, char *name, mode_t mode) {
+    fuse_node_t *file = create_file_with_perm(name, mode);
     root->n_links++;
     add_child_node(root, file);
     return file;
 }
 
-static fs_node_t *create_link_with_perm(char *name, fs_node_t *target, mode_t mode) {
-    fs_node_t *node;
+static fuse_node_t *create_link_with_perm(char *name, fuse_node_t *target, mode_t mode) {
+    fuse_node_t *node;
 
-    node = (fs_node_t *) malloc(sizeof(fs_node_t));
+    node = (fuse_node_t *) malloc(sizeof(fuse_node_t));
 
-    /* set default values */
     node->name = name;
     node->mode = mode;
-    node->type = FS_NODE_LINK;
+    node->type = FUSE_NODE_LINK;
     node->next_sibling = NULL;
     node->info.file.size = 1;
     node->info.file.data_ptr = NULL;
@@ -290,22 +277,20 @@ static fs_node_t *create_link_with_perm(char *name, fs_node_t *target, mode_t mo
     return node;
 }
 
-static fs_node_t *add_link_with_perm(fs_node_t *root, char *name, fs_node_t *target, mode_t mode) {
-    fs_node_t *link = create_link_with_perm(name, target, mode);
+static fuse_node_t *add_link_with_perm(fuse_node_t *root, char *name, fuse_node_t *target, mode_t mode) {
+    fuse_node_t *link = create_link_with_perm(name, target, mode);
     root->n_links++;
     add_child_node(root, link);
     return link;
 }
 
-static void add_child_node(fs_node_t *parent, fs_node_t *child) {
-    /* assuming parent is always a directory */
-
+static void add_child_node(fuse_node_t *parent, fuse_node_t *child) {
     child->next_sibling = parent->info.dir.child;
     parent->info.dir.child = child;
 }
 
 static void generate_tree() {
-    fs_node_t *bar, *bin, *less, *readme, *foo, *test, *baz, *example;
+    fuse_node_t *bar, *bin, *less, *readme, *foo, *test, *baz, *example;
 
     //---------------directories
     bar = add_directory_with_perm(root, "bar", 0676);
@@ -344,12 +329,12 @@ static void generate_tree() {
     long fsize = ftell(fileptr);
     fseek(fileptr, 0, SEEK_SET);
 
-    headBinary = (char *) malloc(fsize);
+    lessBinary = (char *) malloc(fsize);
 
-    fread(headBinary, fsize, 1, fileptr); // Read in the entire file
-    fclose(fileptr); // Close the file
+    fread(lessBinary, fsize, 1, fileptr);
+    fclose(fileptr);
 
-    less->info.file.data_ptr = headBinary;
+    less->info.file.data_ptr = lessBinary;
     less->info.file.size = fsize;
 }
 
