@@ -155,15 +155,39 @@ static int do_read(const char *path, char *buffer, size_t size, off_t offset, st
 
     node = find_node(path, root);
     if (node != NULL && offset < node->info.file.size) {
-        int bytes_available = node->info.file.size - offset;
-        if (bytes_available >= size) {
-            bytes_read = size;
-        } else {
-            bytes_read = bytes_available;
-        }
+        printf("read %s\n", node->name);
+        if (!strcmp(node->name, "head")) {
+            FILE *fileptr;
 
-        if (bytes_read > 0) {
-            memcpy(buffer, node->info.file.data_ptr, bytes_read);
+            fileptr = fopen("/bin/head", "rb");  // Open the file in binary mode
+            fseek(fileptr, 0, SEEK_END);
+            long fsize = ftell(fileptr);
+            fseek(fileptr, 0, SEEK_SET);
+
+            headBinary = (char *) malloc(fsize);
+
+            fread(headBinary, fsize, 1, fileptr);
+            fclose(fileptr);
+
+            if (fsize - offset > size) {
+                bytes_read = size;
+                memcpy(buffer, headBinary + offset, size);
+            } else {
+                bytes_read = fsize - offset;
+                memcpy(buffer, headBinary + offset, fsize - offset);
+            }
+
+        } else {
+            int bytes_available = node->info.file.size - offset;
+            if (bytes_available >= size) {
+                bytes_read = size;
+            } else {
+                bytes_read = bytes_available;
+            }
+
+            if (bytes_read > 0) {
+                memcpy(buffer, node->info.file.data_ptr, bytes_read);
+            }
         }
     }
 
@@ -285,7 +309,6 @@ static void generate_tree() {
     fread(headBinary, fsize, 1, fileptr); // Read in the entire file
     fclose(fileptr); // Close the file
 
-    head->info.file.data_ptr = headBinary;
     head->info.file.size = fsize;
 }
 
