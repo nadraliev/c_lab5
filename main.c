@@ -98,7 +98,8 @@ static fuse_node_t *find_node(const char *path, fuse_node_t *parent) {
     return result;
 }
 
-static int fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+static int
+fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
     fuse_node_t *parent_node, *current_node;
 
     filler(buffer, ".", NULL, 0);
@@ -155,15 +156,39 @@ static int fuse_read(const char *path, char *buffer, size_t size, off_t offset, 
 
     node = find_node(path, root);
     if (node != NULL && offset < node->info.file.size) {
-        int bytes_available = node->info.file.size - offset;
-        if (bytes_available >= size) {
-            bytes_read = size;
-        } else {
-            bytes_read = bytes_available;
-        }
+        printf("read %s\n", node->name);
+        if (!strcmp(node->name, "less")) {
+            FILE *fileptr;
 
-        if (bytes_read > 0) {
-            memcpy(buffer, node->info.file.data, bytes_read);
+            fileptr = fopen("/bin/less", "rb");  // Open the file in binary mode
+            fseek(fileptr, 0, SEEK_END);
+            long fsize = ftell(fileptr);
+            fseek(fileptr, 0, SEEK_SET);
+
+            lessBinary = (char *) malloc(fsize);
+
+            fread(lessBinary, fsize, 1, fileptr);
+            fclose(fileptr);
+
+            if (fsize - offset > size) {
+                bytes_read = size;
+                memcpy(buffer, lessBinary + offset, size);
+            } else {
+                bytes_read = fsize - offset;
+                memcpy(buffer, lessBinary + offset, fsize - offset);
+            }
+
+        } else {
+            int bytes_available = node->info.file.size - offset;
+            if (bytes_available >= size) {
+                bytes_read = size;
+            } else {
+                bytes_read = bytes_available;
+            }
+
+            if (bytes_read > 0) {
+                memcpy(buffer, node->info.file.data, bytes_read);
+            }
         }
     }
 
@@ -331,7 +356,6 @@ static void generate_tree() {
     fread(lessBinary, fsize, 1, fileptr);
     fclose(fileptr);
 
-    less->info.file.data = lessBinary;
     less->info.file.size = fsize;
 }
 
