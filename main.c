@@ -55,7 +55,7 @@ static void add_child_node(fs_node_t *, fs_node_t *);
 static fs_node_t *find_node(const char *, fs_node_t *);
 
 fs_node_t *root;
-char testText[93];
+char testText[89];
 char *cutBinary;
 
 /* Find a node in our virtual FS tree corresponding to the specified path. */
@@ -279,15 +279,15 @@ static void generate_tree() {
 
     //-------------------files
     //-----------------------------------
-    readme->info.file.data_ptr = "Student Даниил Хацкевич, 3-1946\n\0";
+    readme->info.file.data_ptr = "Student Даниил Хацкевич, 16150044\n\0";
     readme->info.file.size = strlen(readme->info.file.data_ptr);
 
     //------------------------------
-    for (int i = 0; i < 46; i++) {
-        testText[i * 2] = 'a';
+    for (int i = 0; i < 44; i++) {
+        testText[i * 2] = 'h';
         testText[i * 2 + 1] = '\n';
     }
-    testText[92] = '\0';
+    testText[88] = '\0';
     test->info.file.data_ptr = testText;
     test->info.file.size = strlen(testText);
 
