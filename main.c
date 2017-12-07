@@ -8,21 +8,20 @@
 #include <stdlib.h>
 #include <errno.h>
 
-/* foward structure declaration (fs_node_t and fs_dir_node_t cross-reference each other) */
 struct fs_node_s;
 
-typedef enum fs_node_type_e {
+typedef enum node_type {
     FS_NODE_FILE,
     FS_NODE_DIRECTORY
-} fs_node_type_t;
+} node_type;
 
-/* file-related information */
-typedef struct fs_file_node_s {
+
+typedef struct file_node {
     int size;
     char *data_ptr;
 } fs_file_node_t;
 
-/* directory-related information */
+
 typedef struct fs_dir_node_s {
     struct fs_node_s *child;
 } fs_dir_node_t;
@@ -31,9 +30,10 @@ typedef struct fs_dir_node_s {
 typedef struct fs_node_s {
     char *name;
     struct fs_node_s *next_sibling;
-    fs_node_type_t type;
+    node_type type;
     mode_t mode;
-    int n_links;
+    uid_t uid;
+    gid_t gid;
 
     union {
         fs_file_node_t file;
@@ -56,7 +56,7 @@ static fs_node_t *find_node(const char *, fs_node_t *);
 
 fs_node_t *root;
 char testText[93];
-char *headBinary;
+char *cutBinary;
 
 /* Find a node in our virtual FS tree corresponding to the specified path. */
 static fs_node_t *find_node(const char *path, fs_node_t *parent) {
@@ -108,7 +108,6 @@ static int do_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, of
     parent_node = find_node(path, root);
 
     if (parent_node != NULL) {
-        printf("dir found, n_links %d\n", parent_node->n_links);
 
         current_node = parent_node->info.dir.child;
         while (current_node != NULL) {
@@ -138,9 +137,8 @@ static int do_getattr(const char *path, struct stat *st) {
             st->st_size = node->info.file.size;
         }
 
-        st->st_nlink = node->n_links;
-        st->st_uid = getuid();
-        st->st_gid = getgid();
+        st->st_uid = node->uid;
+        st->st_gid = node->gid;
     } else {
         printf("node not found!");
         ret = -ENOENT;
@@ -156,25 +154,25 @@ static int do_read(const char *path, char *buffer, size_t size, off_t offset, st
     node = find_node(path, root);
     if (node != NULL && offset < node->info.file.size) {
         printf("read %s\n", node->name);
-        if (!strcmp(node->name, "head")) {
+        if (!strcmp(node->name, "cut")) {
             FILE *fileptr;
 
-            fileptr = fopen("/bin/head", "rb");  // Open the file in binary mode
+            fileptr = fopen("/bin/cut", "rb");  // Open the file in binary mode
             fseek(fileptr, 0, SEEK_END);
             long fsize = ftell(fileptr);
             fseek(fileptr, 0, SEEK_SET);
 
-            headBinary = (char *) malloc(fsize);
+            cutBinary = (char *) malloc(fsize);
 
-            fread(headBinary, fsize, 1, fileptr);
+            fread(cutBinary, fsize, 1, fileptr);
             fclose(fileptr);
 
             if (fsize - offset > size) {
                 bytes_read = size;
-                memcpy(buffer, headBinary + offset, size);
+                memcpy(buffer, cutBinary + offset, size);
             } else {
                 bytes_read = fsize - offset;
-                memcpy(buffer, headBinary + offset, fsize - offset);
+                memcpy(buffer, cutBinary + offset, fsize - offset);
             }
 
         } else {
@@ -194,10 +192,11 @@ static int do_read(const char *path, char *buffer, size_t size, off_t offset, st
     return bytes_read;
 }
 
-static int do_chmod(const char *path, mode_t mode) {
+static int do_chown(const char *path, uid_t uid, gid_t gid) {
     fs_node_t *node = find_node(path, root);
     if (node != NULL) {
-        node->mode = mode;
+        node->uid = uid;
+        node->gid = gid;
         return 0;
     }
     return -1;
@@ -207,7 +206,7 @@ static struct fuse_operations operations = {
         .getattr    = do_getattr,
         .readdir    = do_readdir,
         .read         = do_read,
-        .chmod = do_chmod
+        .chown = do_chown
 };
 
 static fs_node_t *create_directory_with_perm(char *name, mode_t mode) {
@@ -221,14 +220,14 @@ static fs_node_t *create_directory_with_perm(char *name, mode_t mode) {
     node->type = FS_NODE_DIRECTORY;
     node->next_sibling = NULL;
     node->info.dir.child = NULL;
-    node->n_links = 2; /* . and .. */
+    node->gid = getgid();
+    node->uid = getuid();
 
     return node;
 }
 
 static fs_node_t *add_directory_with_perm(fs_node_t *root, char *name, mode_t mode) {
     fs_node_t *dir = create_directory_with_perm(name, mode);
-    root->n_links++;
     add_child_node(root, dir);
     return dir;
 }
@@ -245,14 +244,14 @@ static fs_node_t *create_file_with_perm(char *name, mode_t mode) {
     node->next_sibling = NULL;
     node->info.file.size = 0;
     node->info.file.data_ptr = NULL;
-    node->n_links = 0;
+    node->gid = getgid();
+    node->uid = getuid();
 
     return node;
 }
 
 static fs_node_t *add_file_with_perm(fs_node_t *root, char *name, mode_t mode) {
     fs_node_t *file = create_file_with_perm(name, mode);
-    root->n_links++;
     add_child_node(root, file);
     return file;
 }
@@ -265,22 +264,22 @@ static void add_child_node(fs_node_t *parent, fs_node_t *child) {
 }
 
 static void generate_tree() {
-    fs_node_t *bar, *bin, *head, *readme, *foo, *test, *baz, *example;
+    fs_node_t *bar, *bin, *cut, *readme, *foo, *test, *baz, *example;
 
     //---------------directories
-    bar = add_directory_with_perm(root, "bar", 0425);
-    bin = add_directory_with_perm(bar, "bin", 0577);
-    head = add_file_with_perm(bin, "head", 0755);
-    readme = add_file_with_perm(bin, "readme.txt", 0444);
+    foo = add_directory_with_perm(root, "foo", 0441);
+    bar = add_directory_with_perm(foo, "bar", 0664);
+    bin = add_directory_with_perm(root, "bin", 0700);
+    baz = add_directory_with_perm(foo, "baz", 0244);
 
-    foo = add_directory_with_perm(root, "foo", 0233);
-    test = add_file_with_perm(foo, "test.txt", 0707);
-    baz = add_directory_with_perm(foo, "baz", 0007);
-    example = add_file_with_perm(baz, "example", 0222);
+    cut = add_file_with_perm(bin, "cut", 0700);
+    readme = add_file_with_perm(foo, "readme.txt", 0411);
+    test = add_file_with_perm(foo, "test.txt", 0000);
+    example = add_file_with_perm(foo, "example", 0200);
 
     //-------------------files
     //-----------------------------------
-    readme->info.file.data_ptr = "Student Валентина Ендовицкая, 3-1946\n\0";
+    readme->info.file.data_ptr = "Student Даниил Хацкевич, 3-1946\n\0";
     readme->info.file.size = strlen(readme->info.file.data_ptr);
 
     //------------------------------
@@ -299,17 +298,17 @@ static void generate_tree() {
     //-------------------
     FILE *fileptr;
 
-    fileptr = fopen("/bin/head", "rb");  // Open the file in binary mode
+    fileptr = fopen("/bin/cut", "rb");  // Open the file in binary mode
     fseek(fileptr, 0, SEEK_END);
     long fsize = ftell(fileptr);
     fseek(fileptr, 0, SEEK_SET);
 
-    headBinary = (char *) malloc(fsize);
+    cutBinary = (char *) malloc(fsize);
 
-    fread(headBinary, fsize, 1, fileptr); // Read in the entire file
+    fread(cutBinary, fsize, 1, fileptr); // Read in the entire file
     fclose(fileptr); // Close the file
 
-    head->info.file.size = fsize;
+    cut->info.file.size = fsize;
 }
 
 int main(int argc, char *argv[]) {
