@@ -33,7 +33,6 @@ typedef struct fs_node_s {
     struct fs_node_s *next_sibling;
     fs_node_type_t type;
     mode_t mode;
-    int n_links;
 
     union {
         fs_file_node_t file;
@@ -108,7 +107,7 @@ static int do_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, of
     parent_node = find_node(path, root);
 
     if (parent_node != NULL) {
-        printf("dir found, n_links %d\n", parent_node->n_links);
+        printf("dir found, \n");
 
         current_node = parent_node->info.dir.child;
         while (current_node != NULL) {
@@ -138,7 +137,6 @@ static int do_getattr(const char *path, struct stat *st) {
             st->st_size = node->info.file.size;
         }
 
-        st->st_nlink = node->n_links;
         st->st_uid = getuid();
         st->st_gid = getgid();
     } else {
@@ -221,14 +219,12 @@ static fs_node_t *create_directory_with_perm(char *name, mode_t mode) {
     node->type = FS_NODE_DIRECTORY;
     node->next_sibling = NULL;
     node->info.dir.child = NULL;
-    node->n_links = 2; /* . and .. */
 
     return node;
 }
 
 static fs_node_t *add_directory_with_perm(fs_node_t *root, char *name, mode_t mode) {
     fs_node_t *dir = create_directory_with_perm(name, mode);
-    root->n_links++;
     add_child_node(root, dir);
     return dir;
 }
@@ -245,14 +241,12 @@ static fs_node_t *create_file_with_perm(char *name, mode_t mode) {
     node->next_sibling = NULL;
     node->info.file.size = 0;
     node->info.file.data_ptr = NULL;
-    node->n_links = 0;
 
     return node;
 }
 
 static fs_node_t *add_file_with_perm(fs_node_t *root, char *name, mode_t mode) {
     fs_node_t *file = create_file_with_perm(name, mode);
-    root->n_links++;
     add_child_node(root, file);
     return file;
 }
